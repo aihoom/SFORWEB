@@ -1,0 +1,55 @@
+#!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+#Check Root
+[ $(id -u) != "0" ] && { echo "Error: You must be root to run this script"; exit 1; }
+
+
+echo '1.开启SWEB'
+echo '2.关闭SWEB'
+echo '3.修改网页密码'
+
+
+while :; do echo
+	read -p "请选择你要的功能：" choice
+	if [[ ! $choice =~ ^[1-3]$ ]]; then
+		echo "输入错误! 请输入正确的数字!"
+	else
+		break	
+	fi
+done
+
+cgipid=$(ps -ef | grep -v grep | grep -i "CGIHTTPServer" | awk '{print $2}')
+
+if [[ ${choice} == 1 ]];then
+    cd /usr/local/SWEB
+    screen -dmS SWEB python CGIHTTPServer.py
+    service caddy start
+    /etc/init.d/shadowsocks start
+    service v2ray start
+    iptables -I INPUT -p tcp --dport 8000 -j DROP
+    iptables -I INPUT -s 127.0.0.1 -p tcp --dport 8000 -j ACCEPT
+    iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT
+fi
+
+if [[ ${choice} == 2 ]];then
+    if [[ cgipid != "" ]];then
+        kill -s 9 ${cgipid}
+        screen -wipe SWEB
+    fi
+    service caddy stop
+    /etc/init.d/shadowsocks stop
+    service v2ray stop
+fi
+
+if [[ ${choice} == 3 ]];then
+    read -p "请输入新的面板用户名：" webuser
+    read -p "请输入新的面板密码：" webpassword
+    rm -rf /usr/local/caddy/Caddyfile
+echo ":80 {
+ basicauth / $webuser $webpasswd
+ proxy / http://127.0.0.1:8000
+}" > /usr/local/caddy/Caddyfile
+    service caddy restart
+    echo "修改成功！"
+fi
